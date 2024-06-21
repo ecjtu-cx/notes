@@ -1,8 +1,10 @@
-# C++ is an extension of C
+# C++对C的扩展
 
 
 
 [TOC]
+
+
 
 ## 一、::作用运算符
 
