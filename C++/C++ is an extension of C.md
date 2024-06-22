@@ -368,5 +368,159 @@ int arr[arrSize];
 
 #### c.C/C++中const异同总结
 
-- 
+- **c语言全局const会被存储到只读数据段**。c++中全局const当声明extern或者对变量取地址时，编译器会分配存储地址，变量存储在只读数据段。两个都受到了只读数据段的保护，不可修改。
 
+```c++
+const int constA = 10;
+      int main(){
+           int* p = (int*)&constA;
+           *p = 200;
+     }
+```
+
+以上代码在c/c++中编译通过，在运行期，修改constA的值时，发生写入错误。原因是修改只读数据段的数据。
+
+- **c语言中局部const存储在堆栈区**，只是不能通过变量直接修改const只读变量的值，但是可以跳过编译器的检查，通过指针间接修
+
+  改const值。
+
+```c++
+const int constA = 10;
+	int* p = (int*)&constA;
+	*p = 300;
+	printf("constA:%d\n",constA);
+	printf("*p:%d\n", *p);
+```
+
+运行得到修改后的结果
+
+c语言中，通过指针间接赋值修改了constA的值。
+
+c++中对于局部的const变量要区别对待：
+
+1. 对于基础数据类型，也就是const int a = 10这种，编译器会进行优化，将值替换到访问的位置。
+
+   ```c++
+   const int constA = 10;
+   	int* p = (int*)&constA;
+   	*p = 300;
+   	cout << "constA:" << constA << endl;
+   	cout << "*p:" << *p << endl;
+   //运行结果 constA:10 *p:300
+   ```
+
+2. 对于基础数据类型，如果用一个变量初始化const变量，如果const int a = b,那么也是会给a分配内存。
+
+   ```c++
+   	int b = 10;
+   	const int constA = b;
+   	int* p = (int*)&constA;
+   	*p = 300;
+   	cout << "constA:" << constA << endl;
+   	cout << "*p:" << *p << endl;
+   //运行结果 constA:300 *p:300
+   //constA 分配了内存，所以我们可以修改constA内存中的值。
+   ```
+
+3. 对于自定数据类型，比如类对象，那么也会分配内存。
+
+   ```c++
+       const Person person; //未初始化age
+   	//person.age = 50; //不可修改
+   	Person* pPerson = (Person*)&person;
+   	//指针间接修改
+   	pPerson->age = 100;
+   	cout << "pPerson->age:" << pPerson->age << endl;
+   	pPerson->age = 200;
+   	cout << "pPerson->age:" << pPerson->age << endl;
+   //运行结果 pPerson->age:100 pPerson->age:200
+   //为person分配了内存，我们可以通过指针间接赋值修改person对象
+   ```
+
+- **c中const默认为外部连接，c++中const默认为内部连接**.当c语言两个文件中都有const int a的时候，编译器会报重定义的错误。而在c++中，则不会，因为c++中的const默认是内部连接的。**如果想让c++中的const具有外部连接，必须显示声明为: extern const int a = 10**;
+
+const由c++采用，并加进标准c中，尽管他们很不一样。在c中，编译器对待const如同对待变量一样，只不过带有一个特殊的标记，意思是”你不能改变我”。在c中定义const时，编译器为它创建空间，所以如果在两个不同文件定义多个同名的const，链接器将发生链接错误。简而言之,const在c++中用的更好。
+
+- 能否用变量定义数组
+
+在vs中不支持C99
+
+但正在linux gcc支持C99编译器通过
+
+```c
+int a = 10;
+int arr[a];
+int i = 0;
+for(;i<10;i++) 
+	arr[i] = i;
+i = 0;
+for(;i<10;i++)
+	printf("%d\n",arr[i]);
+```
+
+### 3、尽量以const替换#define
+
+在旧版本C中，如果想建立一个常量，必须使用预处理器”
+
+\#define MAX 1024;// const int max = 1024
+
+我们定义的宏MAX从未被编译器看到过，因为在预处理阶段，所有的MAX已经被替换为了1024，于是MAX并没有将其加入到符号表中。但我们使用这个常量获得一个编译错误信息时，可能会带来一些困惑，因为这个信息可能会提到1024，但是并没有提到MAX.如果MAX被定义在一个不是你写的头文件中，你可能并不知道1024代表什么，也许解决这个问题要花费很长时间。
+
+解决办法就是用一个常量替换上面的宏。
+
+const int max= 1024;
+
+- const和#define区别总结:
+
+对const来说:
+
+  1．const有类型，可进行编译器类型安全检查。#define无类型，不可进行类型检查.  2．const有作用域，而#define不重视作用域，默认定义处到文件结尾.如果定义在指定作用域下有效的常量，那么#define就不能用。  
+
+对#difine来说:
+
+1. 宏常量没有类型，所以调用了int类型重载的函数。const有类型，所以调用希望的short类型函数
+
+   ```c++
+   #define PARAM 128
+   const short param = 128;
+   
+   void func(short a){
+   	cout << "short!" << endl;
+   }
+   void func(int a){
+   	cout << "int" << endl;
+   }
+   ```
+
+2. 宏常量不重视作用域
+
+   ```c++
+   void func1(){
+   	const int a = 10;
+   	#define A 20 
+       //#undef A  //卸载宏常量A
+   }
+   void func2(){
+   	//cout << "a:" << a << endl; //不可访问，超出了const int a作用域
+   	cout << "A:" << A << endl; //#define作用域从定义到文件结束或者到#undef，可访问
+   }
+   int main(){
+   	func2();
+   	return EXIT_SUCCESS;
+   }
+   ```
+
+3. 宏常量没有命名空间
+
+   ```c++
+   namespace MySpace{
+   	#define num 1024
+   }
+   void test(){
+   	//cout << MySpace::num << endl; //错误
+   	//int num = 100; //命名冲突
+   	cout << num << endl;
+   }
+   ```
+
+   
