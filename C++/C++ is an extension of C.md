@@ -582,3 +582,114 @@ void test01(){
 }
 ```
 
+建立数组引用
+
+```c++
+//1.建立数组引用方法一
+typedef int ArrRef[10];
+int arr[10];
+ArrRef& aRef = arr;
+for (int i = 0; i < 10;i ++){
+	aRef[i] = i+1;
+}
+for (int i = 0; i < 10;i++){
+	cout << arr[i] << " ";
+}
+cout << endl;
+//2. 建立数组引用方法二
+int(&f)[10] = arr;
+for (int i = 0; i < 10; i++){
+	f[i] = i+10;
+}
+for (int i = 0; i < 10; i++){
+	cout << arr[i] << " ";
+}
+cout << endl;
+```
+
+### 3.引用的本质
+
+**引用的本质在C++内部实现是一个常指针**
+
+```c++
+Type& ref = val;//Type* const ref = &val;
+```
+
+c++编译器在编译过程中使用常指针作为引用的内部实现，因此引用所占用的空间大小与指针相同，只是这个过程是编译器内部实现，用户不可见。
+
+```c++
+//发现是引用，转换为 int* const ref = &a;
+void testFunc(int& ref){
+	ref = 100; // ref是引用，转换为*ref = 100
+}
+int main(){
+	int a = 10;
+	int& aRef = a; //自动转换为int* const aRef = &a;这也能说明引用为什么必须初始化
+	aRef = 20; //内部发现aRef是引用，自动帮我们转换为: *aRef = 20;
+	cout << "a:" << a << endl;
+	cout << "aRef:" << aRef << endl;
+	testFunc(a);
+	return EXIT_SUCCESS;
+}
+```
+
+### 4.指针引用
+
+在c语言中如果想改变一个指针的指向而不是它所指向的内容，函数声明可能这样:
+
+```c++
+void fun(int**);
+```
+
+给指针变量取一个别名。
+
+```c++
+Type* pointer = NULL;
+Type* &anothername = pointer;
+```
+
+```c++
+struct Teacher{
+	int mAge;
+};
+//指针间接修改teacher的年龄
+void AllocateAndInitByPointer(Teacher** teacher){
+	*teacher = (Teacher*)malloc(sizeof(Teacher*));
+	(*teacher)->mAge = 200;  
+}
+//引用修改teacher年龄
+void AllocateAndInitByReference(Teacher*& teacher){
+	teacher->mAge = 300;
+}
+void test(){
+	//创建Teacher
+	Teacher* teacher = NULL;
+	//指针间接赋值
+	AllocateAndInitByPointer(&teacher);
+	cout << "AllocateAndInitByPointer:" << teacher->mAge << endl;
+	//引用赋值,将teacher本身传到ChangeAgeByReference函数中
+	AllocateAndInitByReference(teacher);
+	cout << "AllocateAndInitByReference:" << teacher->mAge << endl;
+	free(teacher);
+}
+```
+
+对于c++中的定义那个，语法清晰多了。函数参数变成指针的引用，用不着取得指针的地址。
+
+### 5.常量引用
+
+常量引用的定义格式
+
+```c++
+const Type& ref =  val;
+```
+
+常量引用注意:
+
+- 字面不能赋值给引用，但是可以赋值给const
+- const修饰的引用，不能修改
+
+```c++
+
+```
+
