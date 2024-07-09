@@ -690,6 +690,110 @@ const Type& ref =  val;
 - const修饰的引用，不能修改
 
 ```c++
-
+void test01(){
+	int a = 100;
+	const int& aRef = a; //此时aRef就是a
+	//aRef = 200; 不能通过aRef的值
+	a = 100; //OK
+	cout << "a:" << a << endl;
+	cout << "aRef:" << aRef << endl;
+}
+void test02(){
+	//不能把一个字面量赋给引用
+	//int& ref = 100;
+	//但是可以把一个字面量赋给常引用
+	const int& ref = 100; //int temp = 200; const int& ret = temp;
+}
 ```
 
+### 6.引用使用场景
+
+常量引用主要用在函数的形参，尤其是类的拷贝/复制构造函数。
+
+将函数的形参定义为常量的好处：
+
+- 引用不产生新的变量，减少形参与实参传递时的开销
+- 由于引用可能导致实参随形参改变而改变，将其定义为常量引用可以消除这种副作用。
+
+如果希望实参随着形参的改变而改变，那么使用一般的引用，如果不希望实参随着形参改变，那么使用常引用。
+
+```c++
+//const int& param防止函数中意外修改数据
+void ShowVal(const int& param){
+	cout << "param:" << param << endl;
+}
+```
+
+**引用使用中注意点:**
+
+最常见看见引用的地方是在**函数参数**和**返回值**中。当引用被用作函数参数的时，在函数内对任何引用的修改，将对还函数外的参数产生改变。当然，可以通过传递一个指针来做相同的事情，但引用具有更清晰的语法。
+
+如果从函数中返回一个引用，必须像从函数中返回一个指针一样对待。当函数返回值时，引用关联的内存一定要存在。
+
+```c++
+//值传递
+void ValueSwap(int m,int n){
+	int temp = m;
+	m = n;
+	n = temp;
+}
+//地址传递
+void PointerSwap(int* m,int* n){
+	int temp = *m;
+	*m = *n;
+	*n = temp;
+}
+//引用传递
+void ReferenceSwap(int& m,int& n){
+	int temp = m;
+	m = n;
+	n = temp;
+}
+void test(){
+	int a = 10;
+	int b = 20;
+	//值传递
+	ValueSwap(a, b);
+	cout << "a:" << a << " b:" << b << endl;
+	//地址传递
+	PointerSwap(&a, &b);
+	cout << "a:" << a << " b:" << b << endl;
+	//引用传递
+	ReferenceSwap(a, b);
+	cout << "a:" << a << " b:" << b << endl;
+}
+```
+
+通过引用参数产生的效果同按地址传递是一样的。引用的语法更清楚简单:
+
+1. 函数调用时传递的实参不必加&
+2. 在被调函数中不必在参数前加*符
+
+引用作为其它变量的别名而存在，因此在一些场合可以代替指针。C++主张用引用传递取代地址传递的方式，因为引用语法容易且不易出错。
+
+```c++
+//返回局部变量引用
+int& TestFun01(){
+	int a = 10; //局部变量
+	return a;
+}
+//返回静态变量引用
+int& TestFunc02(){	
+	static int a = 20;
+	cout << "static int a : " << a << endl;
+	return a;
+}
+int main(){
+	//不能返回局部变量的引用
+	int& ret01 = TestFun01();
+	//如果函数做左值，那么必须返回引用
+	TestFunc02();
+	TestFunc02() = 100;
+	TestFunc02();
+
+	return EXIT_SUCCESS;
+}
+```
+
+- 调用完成局部变量销毁，不能返回局部变量的引用
+- 函数当左值，必须返回引用
