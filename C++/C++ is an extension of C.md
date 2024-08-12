@@ -797,3 +797,1778 @@ int main(){
 
 - 调用完成局部变量销毁，不能返回局部变量的引用
 - 函数当左值，必须返回引用
+
+## 八、内联函数
+
+### 1.内联函数的引出
+
+在c中我们经常把一些短并且执行频繁的计算写成宏，而不是函数，这样做的理由是为了执行效率，宏可以避免函数调用的开销，这些都由预处理来完成。
+
+在c++出现之后，使用预处理宏会出现两个问题：
+
+1. 第一个在c中也会出现，宏看起来像一个函数调用，但是会有隐藏一些难以发现的错误。
+2. 第二个问题是c++特有的，预处理器不允许访问类的成员，也就是说预处理器宏不能用作类类的成员函数。
+
+为了保持预处理宏的效率又增加安全性，而且还能像一般成员函数那样可以在类里访问自如，c++引入了内联函数
+
+内联函数为了**继承宏函数的效率，没有函数调用时开销，然后又可以像普通函数那样，可以进行参数，返回值类型的安全检查，又可以作为成员函数。**
+
+### 2.预处理宏的缺陷
+
+预处理器宏存在问题的关键是我们可能认为预处理器的行为和编译器的行为是一样的。当然也是由于宏函数调用和函数调用在外表看起来是一样的，因为也容易被混淆。
+
+但是其中也会有一些微妙的问题出现:
+
+1. ```c++
+   #define ADD(x,y) x+y
+   inline int Add(int x,int y){
+   	return x + y;
+   }
+   void test(){
+   	int ret1 = ADD(10, 20) * 10; //希望的结果是300
+   	int ret2 = Add(10, 20) * 10; //希望结果也是300
+   	cout << "ret1:" << ret1 << endl; //210
+   	cout << "ret2:" << ret2 << endl; //300
+   }
+   ```
+
+2. ```c++
+   #define COMPARE(x,y) ((x) < (y) ? (x) : (y))
+   int Compare(int x,int y){
+   	return x < y ? x : y;
+   }
+   void test02(){
+   	int a = 1;
+   	int b = 3;
+   	//cout << "COMPARE(++a, b):" << COMPARE(++a, b) << endl; // 3 展开替换a递增两次
+   	cout << "Compare(int x,int y):" << Compare(++a, b) << endl; //2 递增一次传值
+   }
+   ```
+
+3. 预定义宏函数没有作用域概念，无法作为一个类的成员函数，也就是说预定义宏没有办法表示类的范围。
+
+### 3.内联函数
+
+最好先看类和对象部分再回过头来看b与c部分
+
+#### a.内联函数的基本概念
+
+在c++中，预定义宏的概念是用内联函数来实现的，而**内联函数本身也是一个真正的函数**。内联函数具有普通函数的所有行为。唯一不同之处在于内联函数会在适当的地方像预定义宏一样展开，所以不需要函数调用的开销。因此应该不使用宏，使用内联函数。
+
+**在普通函数(非成员函数)函数前面加上inline关键字使之成为内联函数。**但是必须注意必须函数体和声明结合在一起，否则编译器将它作为普通函数来对待。
+
+```c++
+inline void func(int a);
+```
+
+以上写法没有任何效果，仅仅是声明函数，应该如下方式来做:
+
+```c++
+inline int func(int a){return a++;}
+```
+
+注意: 编译器将会检查函数参数列表使用是否正确，并返回值(进行必要的转换)。这些事预处理器无法完成的。
+
+内联函数的确占用空间，但是内联函数相对于普通函数的优势只是省去了函数调用时候的压栈，跳转，返回的开销。我们可以理解为内联函数是以**空间换时间**
+
+#### b.类内部的内联函数
+
+为了定义内联函数，通常必须在函数定义前面放一个inline关键字。但是在类内部定义内联函数时并不是必须的。任何在类内部定义的函数自动成为内联函数。
+
+```c++
+class Person{
+public:
+	Person(){ cout << "构造函数!" << endl; }
+	void PrintPerson(){ cout << "输出Person!" << endl; }
+}
+```
+
+构造函数Person，成员函数PrintPerson在类的内部定义，自动成为内联函数。
+
+#### c.内联函数和编译器
+
+内联函数并不是何时何地都有效，为了理解内联函数何时有效，应该要知道编译器碰到内联函数会怎么处理。
+
+对于任何类型的函数，编译器会将函数类型(包括函数名字，参数类型，返回值类型)放入到符号表中。同样，当编译器看到内联函数，并且对内联函数体进行分析没有发现错误时，也会将内联函数放入符号表。
+
+当调用一个内联函数的时候，编译器首先确保传入参数类型是正确匹配的，或者如果类型不正完全匹配，但是可以将其转换为正确类型，并且返回值在目标表达式里匹配正确类型，或者可以转换为目标类型，内联函数就会直接替换函数调用，这就消除了函数调用的开销。假如内联函数是成员函数，对象this指针也会被放入合适位置。
+
+类型检查和类型转换、包括在合适位置放入对象this指针这些都是预处理器不能完成的。
+
+但是c++内联编译会有一些限制，以下情况编译器可能考虑不会将函数进行内联编译：
+
+- 不能存在任何形式的循环语句
+- 不能存在过多的条件判断语句
+-  函数体不能过于庞大
+- 不能对函数进行取址操作
+
+**内联仅仅只是给编译器一个建议，编译器不一定会接受这种建议，如果你没有将函数声明为内联函数，那么编译器也可能将此函数做内联编译。一个好的编译器将会内联小的、简单的函数。**
+
+## 九、其他的函数扩展
+
+### 1.函数的默认参数
+
+c++在声明函数原型的时可为一个或者多个参数指定默认(缺省)的参数值，当函数调用的时候如果没有指定这个值，编译器会自动用默认值代替。
+
+```c++
+void TestFunc01(int a = 10, int b = 20){
+	cout << "a + b  = " << a + b << endl;
+}
+//注意点:
+//1. 形参b设置默认参数值，那么后面位置的形参c也需要设置默认参数
+void TestFunc02(int a,int b = 10,int c = 10){}
+//2. 如果函数声明和函数定义分开，函数声明设置了默认参数，函数定义不能再设置默认参数
+void TestFunc03(int a = 0,int b = 0);
+void TestFunc03(int a, int b){}
+
+int main(){
+	//1.如果没有传参数，那么使用默认参数
+	TestFunc01();
+	//2. 如果传一个参数，那么第二个参数使用默认参数
+	TestFunc01(100);
+	//3. 如果传入两个参数，那么两个参数都使用我们传入的参数
+	TestFunc01(100, 200);
+
+	return EXIT_SUCCESS;
+}
+```
+
+注意点:
+
+- 函数的默认参数从左向右，如果一个参数设置了默认参数，那么这个参数之后的参数都必须设置默认参数。
+- 如果函数声明和函数定义分开写，函数声明和函数定义不能同时设置默认参数。
+
+### 2.函数的占位参数
+
+c++在声明函数时，可以设置占位参数。占位参数只有参数类型声明，而没有参数名声明。一般情况下，在函数体内部无法使用占位参数。
+
+```c++
+void TestFunc01(int a,int b,int){
+	//函数内部无法使用占位参数
+	cout << "a + b = " << a + b << endl;
+}
+//占位参数也可以设置默认值
+void TestFunc02(int a, int b, int = 20){
+	//函数内部依旧无法使用占位参数
+	cout << "a + b = " << a + b << endl;
+}
+int main(){
+
+	//错误调用，占位参数也是参数，必须传参数
+	//TestFunc01(10,20); 
+	//正确调用
+	TestFunc01(10,20,30);
+	//正确调用
+	TestFunc02(10,20);
+	//正确调用
+	TestFunc02(10, 20, 30);
+
+	return EXIT_SUCCESS;
+}
+```
+
+什么时候用，在后面操作符重载的后置++会用到
+
+### 3.函数重载
+
+#### a.函数重载概述
+
+在传统c语言中，函数名必须是唯一的，程序中不允许出现同名的函数。在c++中是允许出现同名的函数，这种现象称为函数重载。
+
+函数重载的目的就是为了方便的使用函数名。
+
+#### b.函数重载的基本语法
+
+实现函数重载的条件：
+
+- 同一个作用域
+- 参数个数不同
+- 参数类型不同
+- 参数顺序不同
+
+```c++
+//1. 函数重载条件
+namespace A{
+	void MyFunc(){ cout << "无参数!" << endl; }
+	void MyFunc(int a){ cout << "a: " << a << endl; }
+	void MyFunc(string b){ cout << "b: " << b << endl; }
+	void MyFunc(int a, string b){ cout << "a: " << a << " b:" << b << endl;}
+    void MyFunc(string b, int a){cout << "a: " << a << " b:" << b << endl;}
+}
+//2.返回值不作为函数重载依据
+namespace B{
+	void MyFunc(string b, int a){}
+	//int MyFunc(string b, int a){} //无法重载仅按返回值区分的函数
+}
+```
+
+注意：函数重载和默认参数一起使用，但要注意二义性产生
+
+#### c.函数重载实现原理
+
+编译器为了实现函数重载，也是默认为我们做了一些幕后的工作，编译器用不同的参数类型来修饰不同的函数名，比如void func(); 编译器可能会将函数名修饰成_func，当编译器碰到void func(int x),编译器可能将函数名修饰为func_int,当编译器碰到void func(int x,char c),编译器可能会将函数名修饰为_func_int_char我这里使用”可能”这个字眼是因为编译器如何修饰重载的函数名称并没有一个统一的标准，所以不同的编译器可能会产生不同的内部名。
+
+```c++
+void func(){}
+void func(int x){}
+void func(int x,char y){}
+```
+
+以上三个函数在linux下生成的编译之后的函数名为:
+
+```c++
+_Z4funcv //v 代表void,无参数
+_Z4funci //i 代表参数为int类型
+_Z4funcic //i 代表第一个参数为int类型，第二个参数为char类型
+```
+
+### 3、extern "C"浅析
+
+在linux中测试
+
+```c++
+c函数: void MyFunc(){} ,被编译成函数: MyFunc
+c++函数: void MyFunc(){},被编译成函数: _Z6Myfuncv
+```
+
+通过这个测试，由于c++中需要支持函数重载，所以c和c++中对同一个函数经过编译后生成的函数名是不相同的，这就导致了一个问题，如果在c++中调用一个使用c语言编写模块中的某个函数，那么c++是根据c++的名称修饰方式来查找并链接这个函数，那么就会发生链接错误，以上例，c++中调用MyFunc函数，在链接阶段会去找Z6Myfuncv，结果是没有找到的，因为这个MyFunc函数是c语言编写的，生成的符号是MyFunc
+
+那么如果想在c++调用c的函数怎么办？
+
+extern "C"的主要作用就是为了实现c++代码能够调用其他c语言代码。加上extern "C"后，这部分代码编译器按c语言的方式进行**编译**和**链接**，而不是按c++的方式。
+
+**MyModule.h**
+
+```c++
+#ifndef MYMODULE_H
+#define MYMODULE_H
+
+#include<stdio.h>
+
+#ifdef __cplusplus
+extern "C"{
+#endif
+
+	void func1();
+	int func2(int a,int b);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+```
+
+**MyModule.c**
+
+```c++
+#include"MyModule.h"
+
+void func1(){
+	printf("hello world!");
+}
+int func2(int a, int b){
+	return a + b;
+}
+```
+
+**TestExternC.cpp**
+
+```c++
+#define _CRT_SECURE_NO_WARNINGS
+#include<iostream>
+using namespace std;
+
+#if 0
+
+	#ifdef __cplusplus
+	extern "C" {
+		#if 0
+			void func1();
+			int func2(int a, int b);
+		#else
+			#include"MyModule.h"
+		#endif
+	}
+
+	#endif
+
+#else
+
+	extern "C" void func1();
+	extern "C" int func2(int a, int b);
+
+#endif
+
+int main(){
+	func1();
+	cout << func2(10, 20) << endl;
+	return EXIT_SUCCESS;
+}
+```
+
+## 十、类和对象初探
+
+### 1.类和对象的基本概念
+
+#### a.C和C++中struct区别
+
+- c语言struct只有变量
+- c++语言struct既有变量，也有函数
+
+#### b.类的封装
+
+在C中要表示对象
+
+```c++
+typedef struct _Person{
+	char name[64];
+	int age;
+}Person;
+typedef struct _Aninal{
+	char name[64];
+	int age;
+	int type; //动物种类
+}Ainmal;
+
+void PersonEat(Person* person){
+	printf("%s在吃人吃的饭!\n",person->name);
+}
+void AnimalEat(Ainmal* animal){
+	printf("%s在吃动物吃的饭!\n", animal->name);
+}
+
+int main(){
+
+	Person person;
+	strcpy(person.name, "小明");
+	person.age = 30;
+	AnimalEat(&person);
+
+	return EXIT_SUCCESS;
+}
+```
+
+**在c语言中，行为和属性是分开的**，也就是说吃饭这个属性不属于某类对象，而属于所有的共同的数据，所以不单单是PeopleEat可以调用Person数据，AnimalEat也可以调用Person数据，那么万一调用错误，将会导致问题发生。
+
+假如某对象的某项属性不想被外界获知，或者某些行为不想让外界知道，只需要自己知道就可以。那么这种情况下，封装应该再提供一种机制能够给属性和行为的访问权限控制住。
+
+封装特性包含两个方面，一个是属性和变量合成一个整体，一个是给属性和函数增加访问权限。
+
+- 封装
+  1. 把变量(属性)和函数(操作)合成一个整体，封装在一个类中
+  2. 对变量进行访问控制
+
+- 访问权限
+  1. 在类的内部(作用域范围内)，没有访问权限之分，所有成员可以互相访问
+  2. 在类的外部(作用域范围外)，访问权限才有意义: public，private，protected
+  3. 在类的外部，只有public修饰的成员才能被访问，在没有涉及继承与派生时，private和protected是同等级的，外部不允许访问
+
+| 访问属性  | 属性 | 对象内部 | 对象外部 |
+| --------- | ---- | -------- | -------- |
+| public    | 公有 | 可访问   | 可访问   |
+| protected | 保护 | 可访问   | 不可访问 |
+| private   | 私有 | 可访问   | 不可访问 |
+
+```c++
+//封装两层含义
+//1. 属性和行为合成一个整体
+//2. 访问控制，现实事物本身有些属性和行为是不对外开放
+class Person{
+//人具有的行为(函数)
+public:
+	void Dese(){ cout << "我有钱，年轻，个子又高，就爱嘚瑟!" << endl;}
+//人的属性(变量)
+public:
+	int mTall; //多高，可以让外人知道
+protected:
+	int mMoney; // 有多少钱,只能儿子孙子知道
+private:
+	int mAge; //年龄，不想让外人知道
+};
+int main(){
+	Person p;
+	p.mTall = 220;
+	//p.mMoney 保护成员外部无法访问
+	//p.mAge 私有成员外部无法访问
+	p.Dese();
+
+	return EXIT_SUCCESS;
+}
+```
+
+struct与class的区别:class默认访问权限为private，struct默认访问权限为public
+
+```c++
+class A{
+	int mAge;
+};
+struct B{
+	int mAge;
+};
+
+void test(){
+	A a;
+	B b;
+	//a.mAge; //无法访问私有成员
+	b.mAge; //可正常外部访问
+}
+```
+
+#### c.将成员变量设置为private
+
+1. 可赋予客户端访问数据的一致性。
+
+   如果成员变量不是public，客户端唯一能够访问对象的方法就是通过成员函数。如果类中所有public权限的成员都是函数，客户在访问类成员时只会默认访问函数，不需要考虑访问的成员需不需要添加(),这就省下了许多搔首弄耳的时间。
+
+2. 可细微划分访问控制
+
+   使用成员函数可使得我们对变量的控制处理更加精细。如果我们让所有的成员变量为public，每个人都可以读写它。如果我们设置为private，我们可以实现“不准访问”、“只读访问”、“读写访问”，甚至你可以写出“只写访问”。
+
+   ```c++
+   class AccessLevels{
+       public:
+           //对只读属性进行只读访问
+           int getReadOnly(){ return readOnly; }
+           //对读写属性进行读写访问
+           void setReadWrite(int val){ readWrite = val; }
+           int getReadWrite(){ return readWrite; }
+           //对只写属性进行只写访问
+           void setWriteOnly(int val){ writeOnly = val; }
+       private:
+           int readOnly; //对外只读访问
+           int noAccess; //外部不可访问
+           int readWrite; //读写访问
+           int writeOnly; //只写访问
+   };
+   ```
+
+### 2.面向对象程序设计实例
+
+#### a.设计立方体类
+
+设计立方体类(Cube)，求出立方体的面积( 2*a*b + 2*a*c + 2*b*c )和体积( a * b * c)，分别用**全局函数**和**成员函数**判断两个立方体是否相等。
+
+```c++
+//立方体类
+class Cub{
+public:
+	void setL(int l){ mL = l; }
+	void setW(int w){ mW = w; }
+	void setH(int h){ mH = h; }
+	int getL(){ return mL; }
+	int getW(){ return mW; }
+	int getH(){ return mH; }
+	//立方体面积
+	int caculateS(){ return (mL*mW + mL*mH + mW*mH) * 2; }
+	//立方体体积
+	int caculateV(){ return mL * mW * mH; }
+	//成员方法
+	bool CubCompare(Cub& c){
+		if (getL() == c.getL() && getW() == c.getW() && getH() == c.getH()){
+			return true;
+		}
+		return false;
+	}
+private:
+	int mL; //长
+	int mW; //宽
+	int mH; //高
+};
+
+//比较两个立方体是否相等
+bool CubCompare(Cub& c1, Cub& c2){
+	if (c1.getL() == c2.getL() && c1.getW() == c2.getW() && c1.getH() == c2.getH()){
+		return true;
+	}
+	return false;
+}
+
+void test(){
+	Cub c1, c2;
+	c1.setL(10);
+	c1.setW(20);
+//立方体类
+class Cub{
+public:
+	void setL(int l){ mL = l; }
+	void setW(int w){ mW = w; }
+	void setH(int h){ mH = h; }
+	int getL(){ return mL; }
+	int getW(){ return mW; }
+	int getH(){ return mH; }
+	//立方体面积
+	int caculateS(){ return (mL*mW + mL*mH + mW*mH) * 2; }
+	//立方体体积
+	int caculateV(){ return mL * mW * mH; }
+	//成员方法
+	bool CubCompare(Cub& c){
+		if (getL() == c.getL() && getW() == c.getW() && getH() == c.getH()){
+			return true;
+		}
+		return false;
+	}
+private:
+	int mL; //长
+	int mW; //宽
+	int mH; //高
+};
+
+//比较两个立方体是否相等
+bool CubCompare(Cub& c1, Cub& c2){
+	if (c1.getL() == c2.getL() && c1.getW() == c2.getW() && c1.getH() == c2.getH()){
+		return true;
+	}
+	return false;
+}
+
+void test(){
+	Cub c1, c2;
+	c1.setL(10);
+	c1.setW(20);
+	c1.setH(30);
+
+	c2.setL(20);
+	c2.setW(20);
+	c2.setH(30);
+
+	cout << "c1面积:" << c1.caculateS() << " 体积:" << c1.caculateV() << endl;
+	cout << "c2面积:" << c2.caculateS() << " 体积:" << c2.caculateV() << endl;
+
+	//比较两个立方体是否相等
+	if (CubCompare(c1, c2)){
+		cout << "c1和c2相等!" << endl;
+	}
+	else{
+		cout << "c1和c2不相等!" << endl;
+	}
+
+	if (c1.CubCompare(c2)){
+		cout << "c1和c2相等!" << endl;
+	}
+	else{
+		cout << "c1和c2不相等!" << endl;
+	}
+}
+```
+
+#### b.点和圆的关系
+
+设计一个圆形类（AdvCircle），和一个点类（Point），计算点和圆的关系。假如圆心坐标为x0, y0, 半径为r，点的坐标为x1, y1：
+
+1.点在圆上 2.点在圆内 3.点在圆外
+
+```c++
+//点类
+class Point{
+public:
+	void setX(int x){ mX = x; }
+	void setY(int y){ mY = y; }
+	int getX(){ return mX; }
+	int getY(){ return mY; }
+private:
+	int mX;
+	int mY;
+};
+
+//圆类
+class Circle{
+public:
+	void setP(int x,int y){
+		mP.setX(x);
+		mP.setY(y);
+	}
+	void setR(int r){ mR = r; }
+	Point& getP(){ return mP; }
+	int getR(){ return mR; }
+	//判断点和圆的关系
+	void IsPointInCircle(Point& point){
+		int distance = (point.getX() - mP.getX()) * (point.getX() - mP.getX()) + (point.getY() - mP.getY()) * (point.getY() - mP.getY());
+		int radius = mR * mR;
+		if (distance < radius){
+			cout << "Point(" << point.getX() << "," << point.getY() << ")在圆内!" << endl;
+		}
+		else if (distance > radius){
+			cout << "Point(" << point.getX() << "," << point.getY() << ")在圆外!" << endl;
+		}
+		else{
+			cout << "Point(" << point.getX() << "," << point.getY() << ")在圆上!" << endl;
+		}
+	}
+private:
+	Point mP; //圆心
+	int mR; //半径
+};
+
+void test(){
+	//实例化圆对象
+	Circle circle;
+	circle.setP(20, 20);
+	circle.setR(5);
+	//实例化点对象
+	Point point;
+	point.setX(25);
+	point.setY(20);
+
+	circle.IsPointInCircle(point);
+}
+```
+
+#### c.分文件实现
+
+将上述函数和类分别用头文件和源文件实现
+
+### 3.对象的构造和析构
+
+#### a.初始化和清理
+
+构造函数主要作用在于创建对象时为对象的成员属性赋值，构造函数由编译器自动调用，无须手动调用。
+
+析构函数主要用于对象**销毁前**系统自动调用，执行一些清理工作。
+
+- 构造函数语法
+  1. 构造函数名和类名相同，没有返回值，不能有void，但可以有参数
+  2. ClassName(){}
+
+- 析构函数语法
+  1. 析构函数名是在类名前面加"~"组成，没有返回值，不能有参数，不能重载
+  2. ~ClassName(){}
+
+```c++
+class Person{
+public:
+	Person(){
+		cout << "构造函数调用!" << endl;
+		pName = (char*)malloc(sizeof("John"));
+		strcpy(pName, "John");
+		mTall = 150;
+		mMoney = 100;
+	}
+	~Person(){
+		cout << "析构函数调用!" << endl;
+		if (pName != NULL){
+			free(pName);
+			pName = NULL;
+		}
+	}
+public:
+	char* pName;
+	int mTall;
+	int mMoney;
+};
+
+void test(){
+	Person person;
+	cout << person.pName << person.mTall << person.mMoney << endl;
+}
+```
+
+#### b.构造函数的分类及调用
+
+- 按参数类型:分为无参构造函数和有参构造函数
+- 按类型分类:普通构造函数和拷贝构造函数(复制构造函数)
+
+```c++
+class Person{
+public:
+	Person(){
+		cout << "no param constructor!" << endl;
+		mAge = 0;
+	}
+	//有参构造函数
+	Person(int age){
+		cout << "1 param constructor!" << endl;
+		mAge = age;
+	}
+	//拷贝构造函数(复制构造函数) 使用另一个对象初始化本对象
+	Person(const Person& person){
+		cout << "copy constructor!" << endl;
+		mAge = person.mAge;
+	}
+	//打印年龄
+	void PrintPerson(){
+		cout << "Age:" << mAge << endl;
+	}
+private:
+	int mAge;
+};
+//1. 无参构造调用方式
+void test01(){
+	
+	//调用无参构造函数
+	Person person1; 
+	person1.PrintPerson();
+
+	//无参构造函数错误调用方式
+	//Person person2();
+	//person2.PrintPerson();
+}
+//2. 调用有参构造函数
+void test02(){
+	
+	//第一种 括号法，最常用
+	Person person01(100);
+	person01.PrintPerson();
+
+	//调用拷贝构造函数
+	Person person02(person01);
+	person02.PrintPerson();
+
+	//第二种 匿名对象(显示调用构造函数)
+	Person(200); //匿名对象，没有名字的对象
+
+	Person person03 = Person(300);
+	person03.PrintPerson();
+
+	//注意: 使用匿名对象初始化判断调用哪一个构造函数，要看匿名对象的参数类型
+	Person person06(Person(400)); //等价于 Person person06 = Person(400);
+	person06.PrintPerson();
+
+	//第三种 =号法 隐式转换
+	Person person04 = 100; //Person person04 =  Person(100)
+	person04.PrintPerson();
+
+	//调用拷贝构造
+	Person person05 = person04; //Person person05 =  Person(person04)
+	person05.PrintPerson();
+}
+```
+
+**b为A的实例化对象,A a = A(b) 和 A(b)的区别？**
+
+当A(b) 有变量来接的时候，那么编译器认为他是一个匿名对象，当没有变量来接的时候，编译器认为你A(b) 等价于 A b.
+
+```c++
+class Teacher{
+public:
+	Teacher(){
+		cout << "默认构造函数!" << endl;
+	}
+	Teacher(const Teacher& teacher){
+		cout << "拷贝构造函数!" << endl;
+	}
+public:
+	int mAge;
+};
+void test(){
+	
+	Teacher t1;
+	//error C2086:“Teacher t1”: 重定义
+	Teacher(t1);  //此时等价于 Teacher t1;
+}
+```
+
+#### c.拷贝构造函数调用时机
+
+- 对象以值传递的方式传给函数参数
+- 函数局部对象以值传递的方式从函数返回
+- 用一个对象初始化另一个对象
+
+```c++
+class Person{
+public:
+	Person(){
+		cout << "no param contructor!" << endl;
+		mAge = 10;
+	}
+	Person(int age){
+		cout << "param constructor!" << endl;
+		mAge = age;
+	}
+	Person(const Person& person){
+		cout << "copy constructor!" << endl;
+		mAge = person.mAge;
+	}
+	~Person(){
+		cout << "destructor!" << endl;
+	}
+public:
+	int mAge;
+};
+//1. 旧对象初始化新对象
+void test01(){
+	Person p(10);
+	Person p1(p);
+	Person p2 = Person(p);
+	Person p3 = p; // 相当于Person p2 = Person(p);
+}
+//2. 传递的参数是普通对象，函数参数也是普通对象，传递将会调用拷贝构造
+void doBussiness(Person p){}
+
+void test02(){
+	Person p(10);
+	doBussiness(p);
+}
+//3. 函数返回局部对象
+Person MyBusiness(){
+	Person p(10);
+	cout << "局部p:" << (int*)&p << endl;
+	return p;
+}
+void test03(){
+	//vs release、qt下没有调用拷贝构造函数
+	//vs debug下调用一次拷贝构造函数
+	Person p = MyBusiness();
+	cout << "局部p:" << (int*)&p << endl;
+}
+```
+
+#### d.构造函数调用规则
+
+- 默认情况下，c++编译器至少为我们写的类增加三个函数
+  1. 默认构造函数(无参，函数体为空)
+  2. 默认析构函数(无参，函数体为空)
+  3. 默认拷贝构造函数，对类中非静态成员属性简单值拷贝
+- 如果用户定义拷贝构造函数，c++不会再提供任何默认构造函数
+- 如果用户定义了普通构造函数(非拷贝)，c++不在提供默认无参构造，但是会提供默认拷贝构造
+
+### 4.深拷贝和浅拷贝
+
+#### a.浅拷贝
+
+同一类型的对象之间可以赋值，使得两个对象的成员变量的值相同，两个对象仍然是独立的两个对象，这种情况被称为**浅拷贝.**
+
+一般情况下，浅拷贝没有任何副作用，但是当类中有指针，并且指针指向动态分配的内存空间，析构函数做了动态内存释放的处理，会导致内存问题。
+
+![](C++%20is%20an%20extension%20of%20C.assets/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202024-07-19%20141255.png)
+
+#### b.深拷贝
+
+当类中有指针，并且此指针有动态分配空间，析构函数做了释放处理，往往需要自定义拷贝构造函数，自行给指针动态分配空间，深拷贝。
+
+![](C++%20is%20an%20extension%20of%20C.assets/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202024-07-19%20141716.png)
+
+```c++
+class Person{
+public:
+	Person(char* name,int age){
+		pName = (char*)malloc(strlen(name) + 1);
+		strcpy(pName,name);
+		mAge = age;
+	}
+	//增加拷贝构造函数
+	Person(const Person& person){
+		pName = (char*)malloc(strlen(person.pName) + 1);
+		strcpy(pName, person.pName);
+		mAge = person.mAge;
+	}
+	~Person(){
+		if (pName != NULL){
+			free(pName);
+		}
+	}
+private:
+	char* pName;
+	int mAge;
+};
+
+void test(){
+	Person p1("Edward",30);
+	//用对象p1初始化对象p2,调用c++提供的默认拷贝构造函数
+	Person p2 = p1;
+}
+```
+
+### 5.多个对象构造和析构
+
+#### a.初始化列表
+
+构造函数和其他函数不同，除了有名字，参数列表，函数体之外还有初始化列表。
+
+初始化列表简单使用；
+
+```c++
+class Person{
+public:
+#if 0
+	//传统方式初始化
+	Person(int a,int b,int c){
+		mA = a;
+		mB = b;
+		mC = c;
+	}
+#endif
+	//初始化列表方式初始化
+	Person(int a, int b, int c):mA(a),mB(b),mC(c){}
+	void PrintPerson(){
+		cout << "mA:" << mA << endl;
+		cout << "mB:" << mB << endl;
+		cout << "mC:" << mC << endl;
+	}
+private:
+	int mA;
+	int mB;
+	int mC;
+};
+```
+
+**注意:**初始化成员列表(参数列表)只能在构造函数使用
+
+#### b.类对象作为成员
+
+在类中定义的数据成员一般都是基本的数据类型。但是类中的成员也可以是对象，叫做**对象成员**。
+
+C++中对对象的初始化是非常重要的操作，当创建一个对象的时候，c++编译器必须确保调用了所有子对象的构造函数。如果所有的子对象有默认构造函数，编译器可以自动调用他们。但是如果子对象没有默认的构造函数，或者想指定调用某个构造函数怎么办？
+
+那么是否可以在类的构造函数直接调用子类的属性完成初始化呢？但是如果子类的成员属性是私有的，我们是没有办法访问并完成初始化的。
+
+解决办法非常简单：对于子类调用构造函数，c++为此提供了专门的语法，即构造函数初始化列表。
+
+当调用构造函数时，**首先按各对象成员在类定义中的顺序（和参数列表的顺序无关）依次调用它们的构造函数，对这些对象初始化，最后再调用本身的函数体。也就是说，先调用对象成员的构造函数，再调用本身的构造函数。**
+
+**析构函数和构造函数调用顺序相反，先构造，后析构。**
+
+```c++
+//汽车类
+class Car{
+public:
+	Car(){
+		cout << "Car 默认构造函数!" << endl;
+		mName = "大众汽车";
+	}
+	Car(string name){
+		cout << "Car 带参数构造函数!" << endl;
+		mName = name;
+	}
+	~Car(){
+		cout << "Car 析构函数!" << endl;
+	}
+public:
+	string mName;
+};
+
+//拖拉机
+class Tractor{
+public:
+	Tractor(){
+		cout << "Tractor 默认构造函数!" << endl;
+		mName = "爬土坡专用拖拉机";
+	}
+	Tractor(string name){
+		cout << "Tractor 带参数构造函数!" << endl;
+		mName = name;
+	}
+	~Tractor(){
+		cout << "Tractor 析构函数!" << endl;
+	}
+public:
+	string mName;
+};
+//人类
+class Person{
+public:
+#if 1
+	//类mCar不存在合适的构造函数
+	Person(string name){
+		mName = name;
+	}
+#else
+	//初始化列表可以指定调用构造函数
+	Person(string carName, string tracName, string name) : mTractor(tracName), mCar(carName), mName(name){
+		cout << "Person 构造函数!" << endl;
+	}
+#endif
+	
+	void GoWorkByCar(){
+		cout << mName << "开着" << mCar.mName << "去上班!" << endl;
+	}
+	void GoWorkByTractor(){
+		cout << mName << "开着" << mTractor.mName << "去上班!" << endl;
+	}
+	~Person(){
+		cout << "Person 析构函数!" << endl;
+	}
+private:
+	string mName;
+	Car mCar; //编译只能调用无参的构造
+	Tractor mTractor;
+};
+
+void test(){
+	//Person person("宝马", "东风拖拉机", "赵四");
+	Person person("刘能");
+	person.GoWorkByCar();
+	person.GoWorkByTractor();
+}
+```
+
+### 6.explicit关键字
+
+c++提供了关键字explicit，禁止通过构造函数进行的隐式转换。声明为explicit的构造函数不能在隐式转换中使用。
+
+**explicit注意**
+
+- explicit用于修饰构造函数，防止隐式转化。
+- 是针对单参数的构造函数(或者除了第一个参数外其余参数都有默认值的多参构造)而言。
+
+```c++
+class MyString{
+public:
+	explicit MyString(int n){
+		cout << "MyString(int n)!" << endl;
+	}
+	MyString(const char* str){
+		cout << "MyString(const char* str)" << endl;
+	}
+};
+
+int main(){
+
+	//给字符串赋值？还是初始化？
+	//MyString str1 = 1; 
+	MyString str2(10);
+
+	//寓意非常明确，给字符串赋值
+	MyString str3 = "abcd";
+	MyString str4("abcd");
+
+	return EXIT_SUCCESS;
+}
+```
+
+### 7.动态对象创建
+
+当我们创建数组的时候，总是需要提前预定数组的长度，然后编译器分配预定长度的数组空间，在使用数组的时，会有这样的问题，数组也许空间太大了，浪费空间，也许空间不足，所以对于数组来讲，如果能根据需要来分配空间大小再好不过。
+
+所以动态的意思意味着不确定性。
+
+为了解决这个普遍的编程问题，在运行中可以创建和销毁对象是最基本的要求。当然c早就提供了动态内存分配（dynamic memory allocation）,函数malloc和free可以在运行时从堆中分配存储单元。
+
+然而这些函数在c++中不能很好的运行，因为它不能帮我们完成对象的初始化工作。
+
+#### a.C动态分配内存方法
+
+为了在运行时动态分配内存，c在他的标准库中提供了一些函数,malloc以及它的变种calloc和realloc,释放内存的free,这些函数是有效的、但是原始的，需要程序员理解和小心使用。为了使用c的动态内存分配函数在堆上创建一个类的实例，我们必须这样做:
+
+```c++
+class Person{
+public:
+    Person(){
+        mAge = 20;
+        pName = (char*)malloc(strlen("john")+1);
+        strcpy(pName, "john");
+    }
+    	void Init(){
+		mAge = 20;
+		pName = (char*)malloc(strlen("john")+1);
+		strcpy(pName, "john");
+	}
+	void Clean(){
+		if (pName != NULL){
+			free(pName);
+		}
+	}
+public:
+	int mAge;
+	char* pName;
+};
+int main(){
+
+	//分配内存
+	Person* person = (Person*)malloc(sizeof(Person));
+	if(person == NULL){
+		return 0;
+	}
+	//调用初始化函数
+	person->Init();
+	//清理对象
+	person->Clean();
+	//释放person对象
+	free(person);
+
+	return EXIT_SUCCESS;
+}
+```
+
+**问题:**
+
+- 程序员必须确定对象的长度
+- malloc返回一个void *指针，C++不允许将void *
+- malloc可能申请内存失败，所以必须判断返回值来确保内存分配成功
+- 用户在使用对象之前必须记住对他初始化，构造函数不能显示调用初始化(构造函数是由编译器调用)，用户有可能忘记调用初始化函数。
+
+C的动态内存分配函数太复杂，容易令人混淆，是不可接受的，C++中我们推荐使用运算符new和delete
+
+#### b.new operator
+
+C++中解决动态内存分配的方案是把创建一个对象所需要的操作都结合在一个称为new的运算符里。当用new创建一个对象时，它就在堆里为对象分配内存并调用构造函数完成初始化。
+
+```c++
+Person* person = new Person;
+相当于:
+Person* person = (Person*)malloc(sizeof(Person));
+	if(person == NULL){
+		return 0;
+	}
+person->Init();
+```
+
+New操作符能确定在调用构造函数初始化之前内存分配是成功的，所有不用显式确定调用是否成功。
+
+现在我们发现在堆里创建对象的过程变得简单了，只需要一个简单的表达式，它带有内置的长度计算、类型转换和安全检查。这样在堆创建一个对象和在栈里创建对象一样简单。
+
+#### c.delete operator
+
+new表达式的反面是delete表达式。delete表达式先调用析构函数，然后释放内存。
+
+正如new表达式返回一个指向对象的指针一样，delete需要一个对象的地址。
+
+delete只适用于由new创建的对象。
+
+如果使用一个由malloc或者calloc或者realloc创建的对象使用delete,这个行为是未定义的。因为大多数new和delete的实现机制都使用了malloc和free,所以很可能没有调用析构函数就释放了内存。
+
+如果正在删除的对象的指针是NULL,将不发生任何事，因此建议在删除指针后，立即把指针赋值为NULL，以免对它删除两次，对一些对象删除两次可能会产生某些问题。
+
+```c++
+class Person{
+public:
+	Person(){
+		cout << "无参构造函数!" << endl;
+		pName = (char*)malloc(strlen("undefined") + 1);
+		strcpy(pName, "undefined");
+		mAge = 0;
+	}
+	Person(char* name, int age){
+		cout << "有参构造函数!" << endl;
+		pName = (char*)malloc(strlen(name) + 1);
+		strcpy(pName, name);
+		mAge = age;
+	}
+	void ShowPerson(){
+		cout << "Name:" << pName << " Age:" << mAge << endl;
+	}
+	~Person(){
+		cout << "析构函数!" << endl;
+		if (pName != NULL){
+			delete pName;
+			pName = NULL;
+		}
+	}
+public:
+	char* pName;
+	int mAge;
+};
+
+void test(){
+	Person* person1 = new Person;
+	Person* person2 = new Person("John",33);
+
+	person1->ShowPerson();
+	person2->ShowPerson();
+
+	delete person1;
+	delete person2;
+}
+```
+
+#### d.用于数组的new和delete
+
+使用new和delete在堆上创建数组非常容易。
+
+```c++
+//创建字符数组
+char* pStr = new char[100];
+//创建整型数组
+int* pArr1 = new int[100]; 
+//创建整型数组并初始化
+int* pArr2 = new int[10]{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+
+//释放数组内存
+delete[] pStr;
+delete[] pArr1;
+delete[] pArr2;
+```
+
+**当创建一个对象数组的时候，必须对数组中的每个对象调用构造函数，**除了在栈上可以聚合初始化，必须提供默认的构造函数。
+
+```c++
+class Person{
+public:
+	Person(){
+		pName = (char*)malloc(strlen("undefined") + 1);
+		strcpy(pName, "undefined");
+		mAge = 0;
+	}
+	Person(char* name, int age){
+		pName = (char*)malloc(sizeof(name));
+		strcpy(pName, name);
+		mAge = age;
+	}
+	~Person(){
+		if (pName != NULL){
+			delete pName;
+		}
+	}
+public:
+	char* pName;
+	int mAge;
+};
+void test(){
+	//栈聚合初始化
+	Person person[] = { Person("john", 20), Person("Smith", 22) };
+	cout << person[1].pName << endl;
+    //创建堆上对象数组必须提供构造函数
+	Person* workers = new Person[20]; //自动调用20次无参构造函数
+}
+```
+
+#### e.delete void* 可能会出错
+
+如果对一个void*指针执行delete操作，这将可能成为一个程序错误，除非指针指向的内容是非常简单的，因为它将不执行析构函数.以下代码未调用析构函数，导致可用内存减少。
+
+```c++
+class Person{
+public:
+	Person(char* name, int age){
+		pName = (char*)malloc(sizeof(name));
+		strcpy(pName,name);
+		mAge = age;
+	}
+	~Person(){
+		if (pName != NULL){
+			delete pName;
+		}
+	}
+public:
+	char* pName;
+	int mAge;
+};
+
+void test(){
+	void* person = new Person("john",20);
+	delete person;
+}
+```
+
+**问题:**malloc、free和new、delete可以混搭使用吗？也就是说malloc分配的内存，可以调用delete吗？通过new创建的对象，可以调用free来释放吗？
+
+#### f.使用new和delete采用相同形式
+
+```c++
+Person* person = new Person[10];
+delete person;
+```
+
+使用了new也搭配使用了delete，问题在于Person有10个对象，那么其他9个对象可能没有调用析构函数，也就是说其他9个对象可能删除不完全，因为它们的析构函数没有被调用。
+
+**我们现在清楚使用new的时候发生了两件事: 一、分配内存；二、调用构造函数，那么调用delete的时候也有两件事：一、析构函数；二、释放内存。**
+
+那么刚才我们那段代码最大的问题在于：person指针指向的内存中到底有多少个对象，因为这个决定应该有多少个析构函数应该被调用。换句话说，person指针指向的是一个单一的对象还是一个数组对象，由于单一对象和数组对象的内存布局是不同的。更明确的说，数组所用的内存通常还包括“数组大小记录”，使得delete的时候知道应该调用几次析构函数。单一对象的话就没有这个记录。单一对象和数组对象的内存布局可理解为下图:
+
+![2016-07-18_040751](C++%20is%20an%20extension%20of%20C.assets/clip_image002.jpg)
+
+当我们使用一个delete的时候，我们必须让delete知道指针指向的内存空间中是否存在一个“数组大小记录”的办法就是我们告诉它。当我们使用delete[]，那么delete就知道是一个对象数组，从而清楚应该调用几次析构函数。
+
+**结论:**如果在new表达式中使用[]，必须在相应的delete表达式中也使用[].如果在new表达式中不使用[], 一定不要在相应的delete[]表达式中使用[].
+
+### 8.静态成员函数
+
+在类定义中，它的成员（包括成员变量和成员函数），这些成员可以用关键字static声明为静态的，称为静态成员。
+
+不管这个类创建了多少个对象，静态成员只有一个拷贝，这个拷贝被所有属于这个类的对象共享。
+
+#### a.静态成员变量
+
+在一个类中，若将一个成员变量声明为static，这种成员称为静态成员变量。与一般的数据成员不同，无论建立了多少个对象，都只有一个静态数据的拷贝。静态成员变量，属于某个类，所有对象共享。
+
+静态变量，是在编译阶段就分配空间，对象还没有创建时，就已经分配空间。
+
+- **静态成员变量必须在类中声明，在类外定义。**
+- 静态数据成员不属于某个对象，在为对象分配空间中不包括静态成员所占空间。
+- 静态数据成员可以通过类名或者对象名来引用
+
+```c++
+class Person{
+public:
+	//类的静态成员属性
+	static int sNum;
+private:
+	static int sOther;
+};
+
+//类外初始化，初始化时不加static
+int Person::sNum = 0;
+int Person::sOther = 0;
+int main(){
+
+	//1. 通过类名直接访问
+	Person::sNum = 100;
+	cout << "Person::sNum:" << Person::sNum << endl;
+
+	//2. 通过对象访问
+	Person p1, p2;
+	p1.sNum = 200;
+
+	cout << "p1.sNum:" << p1.sNum << endl;
+	cout << "p2.sNum:" << p2.sNum << endl;
+
+	//3. 静态成员也有访问权限，类外不能访问私有成员
+	//cout << "Person::sOther:" << Person::sOther << endl;
+	Person p3;
+	//cout << "p3.sOther:" << p3.sOther << endl;
+
+	system("pause");
+	return EXIT_SUCCESS;
+}
+```
+
+#### b.静态成员函数
+
+在类定义中，前面有static说明的成员函数称为静态成员函数。静态成员函数使用方式和静态变量一样，同样在对象没有创建前，即可通过类名调用。**静态成员函数主要为了访问静态变量，但是，不能访问普通成员变量。**
+
+静态成员函数的意义，不在于信息共享，数据沟通，而在于管理静态数据成员，完成对静态数据成员的封装。
+
+- 静态成员函数只能访问静态变量，不能访问普通成员变量。
+- 静态成员函数的使用和静态成员变量一样。
+- 静态成员函数也有访问权限。
+- 普通成员函数可以访问静态成员变量、也可以访问非静态成员变量。
+
+```c++
+class Person{
+public:
+	//普通成员函数可以访问static和non-static成员属性
+	void changeParam1(int param){
+		mParam = param;
+		sNum = param;
+	}
+	//静态成员函数只能访问static成员属性
+	static void changeParam2(int param){
+		//mParam = param; //无法访问
+		sNum = param;
+	}
+private:
+	static void changeParam3(int param){
+		//mParam = param; //无法访问
+		sNum = param;
+	}
+public:
+	int mParam;
+	static int sNum;
+};
+
+//静态成员属性类外初始化
+int Person::sNum = 0;
+
+int main(){
+
+	//1. 类名直接调用
+	Person::changeParam2(100);
+
+	//2. 通过对象调用
+	Person p;
+	p.changeParam2(200);
+
+	//3. 静态成员函数也有访问权限
+	//Person::changeParam3(100); //类外无法访问私有静态成员函数
+	//Person p1;
+	//p1.changeParam3(200);
+	return EXIT_SUCCESS;
+}
+```
+
+#### c.const静态成员属性
+
+如果一个类的成员，既要实现共享，又要实现不可改变，那就用 static const 修饰。**定义静态const数据成员时，最好在类内部初始化**。
+
+```c++
+class Person{
+public:
+	//static const int mShare = 10;
+	const static int mShare = 10; //只读区
+};
+int main(){
+
+	cout << Person::mShare << endl;
+	//Person::mShare = 20;
+
+	return EXIT_SUCCESS;
+}
+```
+
+#### d.单例模式
+
+单例模式是一种常用的软件设计模式。在它的核心结构中只包含一个被称为单例的特殊类。通过单例模式可以保证系统中一个类只有一个实例而且该实例易于外界访问，从而方便对实例个数的控制并节约系统资源。如果希望在系统中某个类的对象只能存在一个，单例模式是最好的解决方案。
+
+![IMG_256](C++%20is%20an%20extension%20of%20C.assets/clip_image002-1721462367105.jpg)
+
+Singleton（单例）：在单例类的内部实现只生成一个实例，同时它提供一个静态的getInstance()工厂方法，让客户可以访问它的唯一实例；为了防止在外部对其实例化，将其默认构造函数和拷贝构造函数设计为私有；在单例类内部定义了一个Singleton类型的静态对象，作为外部共享的唯一实例。
+
+例如:用单例模式，模拟公司员工使用打印机场景，打印机可以打印员工要输出的内容，并且可以累积打印机使用次数。
+
+```c++
+#include <iostream>
+using namespace std;
+
+class Printer {
+public:
+    static Printer* getInstance() {
+        return &pPrinter;
+    }
+    void PrintText(string text) {
+        cout << "打印内容: " << text << endl;
+        cout << "已打印次数: " << mTimes << endl;
+        cout << "--------------" << endl;
+        mTimes++;
+    }
+private:
+    Printer() {
+        mTimes = 0;
+    }
+    Printer(const Printer&) = delete;
+    Printer& operator=(const Printer&) = delete;
+private:
+    static Printer* pPrinter;
+    int mTimes;
+};
+
+Printer* Printer::pPrinter = new Printer();
+
+void test() {
+    Printer* printer = Printer::getInstance();
+    printer->PrintText("离职报告!");
+    printer->PrintText("入职合同!");
+    printer->PrintText("提交代码!");
+}
+
+int main() {
+    test();
+    return 0;
+}
+```
+
+## 十一、面向对象模型(类和对象深探)
+
+### 1.成员变量和成员函数的存储
+
+c++实现了“封装”，那么数据(成员属性)和操作(成员函数)是什么样的呢？
+
+“数据”和“处理数据的操作(函数)”是分开存储的。
+
+- c++中的**非静态数据成员**直接内含在类对象中，就像c struct一样。
+- 成员函数(member function)虽然内含在class声明之内，却不出现在对象中。
+- 每一个非内联函数(non-inline member function)只会诞生一份函数实例。
+
+```c++
+#include <iostream>
+using namespace std;
+
+class MyClass01{
+public:
+	int mA;
+};
+
+class MyClass02{
+public:
+	int mA;
+	static int sB;
+};
+
+class MyClass03{
+public:
+	void printMyClass(){
+		cout << "hello world!" << endl;
+	}
+public:
+	int mA;
+	static int sB;
+};
+
+class MyClass04{
+public:
+	void printMyClass(){
+		cout << "hello world!" << endl;
+	}
+	static void ShowMyClass(){
+		cout << "hello world！" << endl;
+	}
+public:
+	int mA;
+	static int sB;
+};
+
+int main(){
+
+	MyClass01 mclass01;
+	MyClass02 mclass02;
+	MyClass03 mclass03;
+	MyClass04 mclass04;
+
+	cout << "MyClass01:" << sizeof(mclass01) << endl; //4
+	//静态数据成员并不保存在类对象中
+	cout << "MyClass02:" << sizeof(mclass02) << endl; //4
+	//非静态成员函数不保存在类对象中
+	cout << "MyClass03:" << sizeof(mclass03) << endl; //4
+	//静态成员函数也不保存在类对象中
+	cout << "MyClass04:" << sizeof(mclass04) << endl; //4
+
+	return EXIT_SUCCESS;
+}
+```
+
+**上面的实例可以看出C++类对象中的变量和函数分开存储。**
+
+### 2.this指针
+
+#### a.this指针工作原理
+
+c++的数据和操作也是分开存储，并且每一个非内联成员函数(non-inline member function)只会诞生一份函数实例，也就是说多个同类型的对象会共用一块代码。
+
+那么问题是：这一块代码是如何区分那个对象调用自己的呢？
+
+![2016-05-10_213705](C++%20is%20an%20extension%20of%20C.assets/clip_image002-1721634046706.jpg)
+
+c++通过提供特殊的对象指针，this指针，解决上述问题。This指针指向被调用的成员函数所属的对象。
+
+c++规定，this指针是隐含在对象成员函数内的一种指针。当一个对象被创建后，它的每一个成员函数都含有一个系统自动生成的隐含指针this，用以保存这个对象的地址，也就是说虽然我们没有写上this指针，编译器在编译的时候也是会加上的。因此this也称为“指向本对象的指针”，this指针并不是对象的一部分，不会影响sizeof(对象)的结果。
+
+this指针是C++实现封装的一种机制，它将对象和该对象调用的成员函数连接在一起，在外部看来，每一个对象都拥有自己的函数成员。一般情况下，并不写this，而是让系统进行默认设置。
+
+**this指针永远指向当前对象。**
+
+成员函数通过this指针即可知道操作的是哪个对象的数据。this指针是一种隐含的指针，它隐含于每个类的非静态成员函数中。this指针无需定义，直接使用即可。
+
+**注意：静态成员内部没有this指针，静态成员函数不能操作非静态成员变量。**
+
+```c++
+class Test{
+public:
+    Test(int a){
+        m_a = a;
+    }
+    int getA(){
+        return m_a;
+    }
+    static void print(){
+        cout << "This is class Test" << endl;
+    }
+private:
+    int m_a;
+};
+
+Test a(10);
+
+a.getA();
+
+Test::print();
+/*--------------------------------------------------------------------------------------------------------*/
+struct Test{
+    int m_a;
+};
+
+void Test_initialize(Test *pThis, int i){
+    pThis->m_a = i;
+}
+
+int Test_getA(Test* pThis){
+    return pThis->m_a;
+}
+
+void Test_print(){
+    cout << "hello world" << endl;
+}
+
+Test a;
+Test_initialize(&a, 10);
+Test_getA(&a);
+Test_print();
+```
+
+#### b.this指针的使用
+
+- 当形参和成员变量同名时，可用this指针来区分
+- 在类的非静态成员函数中返回对象本身，可使用return *this
+
+```c++
+class Person{
+public:
+	//1. 当形参名和成员变量名一样时，this指针可用来区分
+	Person(string name,int age){
+		//name = name;
+		//age = age; //输出错误
+		this->name = name;
+		this->age = age;
+	}
+	//2. 返回对象本身的引用
+	//重载赋值操作符
+	//其实也是两个参数，其中隐藏了一个this指针
+	Person PersonPlusPerson(Person& person){
+		string newname = this->name + person.name;
+		int newage = this->age + person.age;
+		Person newperson(newname, newage);
+		return newperson;
+	}
+	void ShowPerson(){
+		cout << "Name:" << name << " Age:" << age << endl;
+	}
+public:
+	string name;
+	int age;
+};
+
+//3. 成员函数和全局函数(Perosn对象相加)
+Person PersonPlusPerson(Person& p1,Person& p2){
+	string newname = p1.name + p2.name;
+	int newage = p1.age + p2.age;
+	Person newperson(newname,newage);
+	return newperson;
+}
+
+int main(){
+
+	Person person("John",100);
+	person.ShowPerson();
+
+	cout << "---------" << endl;
+	Person person1("John",20);
+	Person person2("001", 10);
+	//1.全局函数实现两个对象相加
+	Person person3 = PersonPlusPerson(person1, person2);
+	person1.ShowPerson();
+	person2.ShowPerson();
+	person3.ShowPerson();
+	//2. 成员函数实现两个对象相加
+	Person person4 = person1.PersonPlusPerson(person2);
+	person4.ShowPerson();
+
+	system("pause");
+	return EXIT_SUCCESS;
+}
+```
+
+#### c.const修饰成员函数
+
+- 用const修饰的成员函数时，const修饰this指针指向的内存区域，成员函数体内不可以修改本类中的任何普通成员变量。
+- 当成员变量类型符前用mutable修饰时例外。
+
+```c++
+//const修饰成员函数
+class Person{
+public:
+	Person(){
+		this->mAge = 0;
+		this->mID = 0;
+	}
+	//在函数括号后面加上const,修饰成员变量不可修改,除了mutable变量
+	void sonmeOperate() const{
+		//this->mAge = 200; //mAge不可修改
+		this->mID = 10; //const Person* const tihs;
+	}
+	void ShowPerson(){
+		cout << "ID:" << mID << " mAge:" << mAge << endl;
+	}
+private:
+	int mAge;
+	mutable int mID;
+};
+
+int main(){
+
+	Person person;
+	person.sonmeOperate();
+	person.ShowPerson();
+	system("pause");
+	return EXIT_SUCCESS;
+}
+```
+
+#### d.const修饰类对象
+
+- 常对象只能调用const的成员函数。
+- 常对象可访问const或非const数据成员，不能修改，除非成员用mutable修饰。
+
+```c++
+class Person{
+public:
+	Person(){
+		this->mAge = 0;
+		this->mID = 0;
+	}
+	void ChangePerson() const{
+		mAge = 100;
+		mID = 100;
+	}
+	void ShowPerson(){
+		cout << "ID:" << this->mID << " Age:" << this->mAge << endl;
+	}
+
+public:
+	int mAge;
+	mutable int mID;
+};
+
+void test(){	
+	const Person person;
+	//1. 可访问数据成员
+	cout << "Age:" << person.mAge << endl;
+	//person.mAge = 300; //不可修改
+	person.mID = 1001; //但是可以修改mutable修饰的成员变量
+	//2. 只能访问const修饰的函数
+	//person.ShowPerson();
+	person.ChangePerson();
+}
+```
+
+## 十二、友元
+
+- friend关键字只出现在声明处
+- 其他类、类成员函数、全局函数都可声明为友元
+- 友元函数不是类的成员，不带this指针
+- 友元函数可访问任意成员属性，包括私有属性
+
+```c++
+Class Building;
+//友元类
+class MyFriend{
+public:
+    //友元成员函数
+    void LookAtBedRoom(Building& building);
+    void PlayInBedRoom(Building& building);
+};
+classBuilding{
+    //全局函数做友元函数
+    friend void CleanBedRoom(Building& building);
+#if 0
+    //成员函数做友元函数
+    friend void MyFriend::LookAtBedRoom(Building& building);
+	friend void MyFriend::PlayInBedRoom(Building& building);
+#else
+    //友元类
+    friend class MyFriend;
+#endif
+public:
+    Building();
+public:
+    string mSittingRoom;
+private:
+    string mBedroom;
+};
+void MyFriend::LookAtBedRoom(Building& building){
+    cout <<"我的朋友参观"<<building.mBedroom << endl;
+}
+voidMyFriend::PlayInBedRoom(Building& building){
+    cout << "我的朋友玩耍在" << building.mBedroom << endl;
+}
+//友元全局函数
+void CleanBedRoom(Building& building){
+    cout << "友元全局函数访问" << building.mBedroom << endl;
+}
+Building::Building(){
+    this->mSittingRoom ="客厅";
+    this->mBedroom ="卧室";
+}
+int main(){
+    Building building;
+    MyFriend myfriend;
+    CleanBedRoom(building);
+    myfriend.LookAtBedRoom(building);
+    myfriend.PlayInBedRoom(building);
+    system("pause");
+    return EXIT_SUCCESS;
+}
+```
+
+友元类注意:
+
+1. 友元关系不能被继承
+2. 友元关系是单向的，类A是类B的朋友，但类B不一定是类A的朋友
+3. 友元关系不一定具有传递性。类B是类A的朋友，类C是类B的朋友，但类C不一定是类A的朋友
